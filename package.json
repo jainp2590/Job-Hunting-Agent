@@ -1,0 +1,21 @@
+{
+  "name": "job-hunting-agent",
+  "version": "1.0.0",
+  "description": "CareerAgent pipeline and Google Sheets job application tracker.",
+  "main": "src/index.js",
+  "scripts": {
+    "start": "node src/index.js"
+  },
+  "keywords": [
+    "career",
+    "job-search",
+    "agent",
+    "excel"
+  ],
+  "author": "",
+  "license": "MIT",
+  "dependencies": {
+    "googleapis": "^133.0.0",
+    "xlsx": "^0.18.5"
+  }
+}
