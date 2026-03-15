@@ -1,16 +1,18 @@
 # Job Hunting Agent
 
-A Node.js pipeline that acts as **CareerAgent**: an expert career assistant for software engineers. It matches your profile to job postings, scores fit, suggests resume tweaks, drafts cover letters, and records every decision in a **Google Sheet** so you can track applications in one place.
+A Node.js pipeline that acts as **CareerAgent**: an expert career assistant for software engineers. You provide your **resume PDF** and **up to 10 tags** (skills, role, location); the app **searches job portals** by those tags, scores each job, computes an **ATS score**, suggests resume tweaks, drafts cover letters, and **lists every result in a Google Sheet** with apply links so you can apply in one place.
 
 ---
 
 ## Features
 
-- **Job matching** — Analyzes job descriptions and your profile (skills, experience, seniority, tech stack). Assigns a 0–100 match score and only recommends applying when the score is above your threshold.
-- **Resume optimization** — Suggests how to highlight existing experience and align with job keywords; never invents skills or experience you don’t have.
-- **Cover letter draft** — Generates a short, tailored cover letter for the company and role.
-- **Apply / Skip decision** — Clear Apply or Skip per job, with reasoning (matching skills, missing skills, seniority alignment).
-- **Google Sheets tracking** — Appends each evaluation (date, company, title, score, decision, reasoning) to a sheet you provide via link.
+- **Job search by tags** — Enter up to 10 tags (e.g. “Node.js”, “JavaScript”, “Remote”, “Backend”), comma-separated; the app searches the web for jobs matching those tags (via JSearch API or mock data when no API key).
+- **Job matching** — For each job found, analyzes fit (skills, experience, seniority). Assigns a 0–100 match score and Apply/Skip decision.
+- **ATS score** — Computes a 0–100 ATS (Applicant Tracking System) score from resume vs job description keyword overlap.
+- **Resume optimization** — Suggests how to align your resume with each job (keywords, tweaks); never invents experience.
+- **Cover letter draft** — Generates a tailored cover letter per job.
+- **Resume tailored per job** — For each job, the app builds a modified resume (targeted summary + your content), generates a PDF, saves it to a local resume folder (`data/resumes` by default), and adds the link in the sheet and UI. Open or download from the **Tailored resume** link.
+- **Google Sheets tracking** — Each job is appended to your sheet with: date, company, title, job URL, match score, ATS score, decision, reasoning, resume notes, cover letter, and **modified_resume_link** (path to the tailored PDF).
 
 ---
 
@@ -18,14 +20,29 @@ A Node.js pipeline that acts as **CareerAgent**: an expert career assistant for 
 
 ```
 Job-Hunting-Agent/
+├── public/
+│   └── index.html                  # Web UI: resume + tags + sheet link
 ├── src/
 │   ├── index.js                    # Entrypoint; sample run + env config
+│   ├── server.js                   # Express + /api/evaluate, /api/search-and-apply
 │   ├── agents/
 │   │   └── CareerAgentPipeline.js   # Match scoring, reasoning, cover letter
+│   ├── services/
+│   │   └── job_search_service.js    # Job search (JSearch API or mock)
+│   ├── utils/
+│   │   ├── ats_score.js             # ATS score from resume vs job text
+│   │   └── resume_optimizer.js      # Optimized summary per job
 │   └── tracking/
 │       ├── job_application_tracker.js           # Local Excel (xlsx) tracker
 │       └── google_sheets_job_application_tracker.js  # Google Sheets tracker
 ├── data/                           # Created when using Excel tracker (optional)
+├── tests/                          # Automated tests (Jest + supertest)
+│   ├── api/                        # API endpoint tests
+│   ├── unit/                       # Unit tests (tags, sheet, drive, pipeline)
+│   ├── helpers/                    # Test helpers (e.g. PDF buffer)
+│   └── routes.test.js              # Static and route tests
+├── docs/
+│   └── QA_TEST_CASES.md            # Full QA test case list + automation map
 ├── package.json
 └── Readme.md
 ```
@@ -46,6 +63,53 @@ git clone <repo-url>
 cd Job-Hunting-Agent
 npm install
 ```
+
+Copy the example env file and fill in your values:
+
+```bash
+cp .env.example .env
+# Edit .env and set GOOGLE_APPLICATION_CREDENTIALS, JOB_AGENT_SHEET_URL, RAPIDAPI_KEY (optional)
+```
+
+The app loads `.env` automatically (via `dotenv`). Do not commit `.env`; it is listed in `.gitignore`.
+
+---
+
+## Web UI (resume PDF + tags + Google Sheet link)
+
+The frontend takes your **resume PDF** and **up to 10 tags** (comma-separated). The app searches for jobs matching those tags, evaluates each one (match score + ATS score), suggests resume tweaks, generates a cover letter, and lists every job in your Google Sheet with apply links.
+
+1. Set `GOOGLE_APPLICATION_CREDENTIALS` if you want to record to Google Sheets (see [Google Sheets setup](#google-sheets-setup)).
+2. Optional: set `RAPIDAPI_KEY` for live job search (see [Job search](#job-search-api)). Without it, the app uses mock job data so you can test the flow.
+3. Start the server:
+
+   ```bash
+   npm run server
+   ```
+
+4. Open [http://localhost:3000](http://localhost:3000).
+5. Fill in:
+   - **Resume**: Upload a **resume PDF** (required; max 5 MB). Profile is inferred from the PDF.
+   - **Tags**: Up to 10 comma-separated tags (e.g. “Node.js, JavaScript, Remote, Backend”). The app searches job portals by these tags and evaluates each result.
+   - **Google Sheet link** (optional): Your sheet URL; share the sheet with the service account. Each job is appended with match score, ATS score, decision, resume notes, and cover letter.
+6. Click **Search jobs & apply**. The page shows a table of jobs with match score, ATS score, decision, apply link, and expandable reasoning and cover letter. All rows are also written to your sheet.
+
+---
+
+## Job search API
+
+Job search uses [JSearch](https://rapidapi.com/letscrape-6bRBa3QguO5/api/jsearch) on RapidAPI. Without an API key, the app returns **mock jobs** (3 sample listings) so you can run the full flow.
+
+To use live job search:
+
+1. Sign up at [RapidAPI](https://rapidapi.com/) and subscribe to the JSearch API (free tier available).
+2. Copy your RapidAPI key and set:
+
+   ```bash
+   export RAPIDAPI_KEY="your-rapidapi-key"
+   ```
+
+3. Restart the server. Searches will then use real job listings.
 
 ---
 
@@ -73,15 +137,14 @@ Tracking writes to a **Google Sheet** you own. You need a service account and to
 
 ### 4. Set environment variables
 
-Point the app to the key file and your sheet:
+Set them in `.env` (recommended) or export in your shell:
 
-```bash
-export GOOGLE_APPLICATION_CREDENTIALS="/absolute/path/to/your-service-account-key.json"
-export JOB_AGENT_SHEET_URL="https://docs.google.com/spreadsheets/d/YOUR_SHEET_ID/edit#gid=0"
-```
-
-- `GOOGLE_APPLICATION_CREDENTIALS` — Path to the service account JSON key.
-- `JOB_AGENT_SHEET_URL` — Full Google Sheet URL; the app will extract the sheet ID from it.
+- `GOOGLE_APPLICATION_CREDENTIALS` — Path to the service account JSON key file (for Sheets only).
+- `JOB_AGENT_SHEET_URL` — Full Google Sheet URL (optional; can also be set per request in the UI).
+- `RESUME_OUTPUT_DIR` — (Optional) Folder for tailored resume PDFs; default `data/resumes`. Served at `/resumes/` so you can open or download saved PDFs from the UI.
+- `RAPIDAPI_KEY` — Your RapidAPI key for live job search (optional; mock jobs used if unset).
+- `PORT` — Server port (default 3000).
+- `LOG_LEVEL` — Logging level: `debug` | `info` | `warn` | `error` (default: `info`).
 
 ---
 
@@ -90,7 +153,10 @@ export JOB_AGENT_SHEET_URL="https://docs.google.com/spreadsheets/d/YOUR_SHEET_ID
 | Variable | Required | Description |
 |----------|----------|-------------|
 | `GOOGLE_APPLICATION_CREDENTIALS` | Yes (for Sheets) | Path to service account JSON key file. |
-| `JOB_AGENT_SHEET_URL` | Yes (for Sheets) | Full Google Sheet URL (e.g. `https://docs.google.com/spreadsheets/d/ID/edit...`). |
+| `JOB_AGENT_SHEET_URL` | No (for Sheets) | Full Google Sheet URL; used when you pass a sheet link in the UI. |
+| `RESUME_OUTPUT_DIR` | No | Folder for tailored resume PDFs (default: `data/resumes`); served at `/resumes/`. |
+| `RAPIDAPI_KEY` | No (for job search) | RapidAPI key for JSearch; without it, mock jobs are used. |
+| `LOG_LEVEL` | No | `debug` \| `info` \| `warn` \| `error`. |
 
 If `JOB_AGENT_SHEET_URL` is not set, the sample in `index.js` still runs the pipeline and prints output, but recording to Google Sheets will be skipped (no sheet ID).
 
@@ -210,21 +276,39 @@ Each job is a single object:
 
 ## Google Sheet columns (Applications sheet)
 
-Rows appended by the tracker have one row per evaluation:
+Rows appended by the tracker have one row per job:
 
 | Column | Description |
 |--------|-------------|
 | `date` | ISO timestamp when the row was written. |
-| `company_name` | From `job_posting.company_name`. |
-| `job_title` | From `job_posting.title`. |
-| `location` | From `job_posting.location`. |
-| `job_match_score` | 0–100. |
+| `company_name` | From job posting. |
+| `job_title` | Job title. |
+| `location` | Job location. |
+| `job_url` | Apply link for the job (from job search). |
+| `job_match_score` | 0–100 match score. |
+| `ats_score` | 0–100 ATS (keyword) score. |
 | `decision` | Apply or Skip. |
 | `key_matching_skills` | Comma-separated matching skills. |
 | `missing_skills` | Comma-separated missing required skills. |
 | `seniority_alignment` | Short text on profile vs job seniority. |
+| `resume_optimization_notes` | Summary of resume tweaks for this job. |
+| `cover_letter_draft` | Generated cover letter text. |
+| `modified_resume_link` | Path or link to the tailored resume PDF (saved locally; served at `/resumes/...`). |
 
 The first row is written as a header if the sheet is empty.
+
+---
+
+## Testing
+
+Automated tests cover the [QA test cases](docs/QA_TEST_CASES.md) (API, tags, sheet URL, local resume save, security, edge cases).
+
+```bash
+npm test
+npm run test:coverage
+```
+
+Tests use Jest and supertest; external services (job search) are mocked so no API keys are required to run the suite.
 
 ---
 

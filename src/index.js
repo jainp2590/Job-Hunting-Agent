@@ -1,3 +1,4 @@
+require("dotenv").config();
 const { CareerAgentPipeline } = require("./agents/CareerAgentPipeline");
 const {
   GoogleSheetsJobApplicationTracker,

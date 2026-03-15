@@ -1,0 +1,45 @@
+# Dependencies
+node_modules/
+
+# Sensitive and secrets (never commit)
+.env
+.env.local
+.env.*.local
+.env.development
+.env.production
+.env.test
+*.env
+.google_cloud_key.json
+*-credentials.json
+*-sa.json
+*service-account*.json
+*service_account*.json
+*-key.json
+*.pem
+*.p12
+*.key
+secrets/
+keys/
+*_oauth_tokens*.json
+*tokens*.json
+credentials/
+*.secret
+config.local.*
+.secret
+.secrets
+
+# Data and uploads (may contain PII)
+data/
+data/resumes/
+*.xlsx
+
+# Logs and OS
+*.log
+.DS_Store
+
+# IDE and Cursor
+.idea/
+.vscode/
+.cursor/
+*.swp
+*.swo

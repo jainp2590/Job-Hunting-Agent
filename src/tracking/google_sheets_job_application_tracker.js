@@ -56,7 +56,7 @@ class GoogleSheetsJobApplicationTracker {
   }
 
   async ensureHeaderRow(sheets) {
-    const range = `${this.options.sheet_name}!A1:I1`;
+    const range = `${this.options.sheet_name}!A1:N1`;
 
     const response = await sheets.spreadsheets.values.get({
       spreadsheetId: this.options.sheet_id,
@@ -64,29 +64,42 @@ class GoogleSheetsJobApplicationTracker {
     });
 
     const values = response.data.values;
-
-    if (values && values.length > 0) {
-      return;
-    }
-
-    const header_row = [
+    const full_header = [
       "date",
       "company_name",
       "job_title",
       "location",
+      "job_url",
       "job_match_score",
+      "ats_score",
       "decision",
       "key_matching_skills",
       "missing_skills",
       "seniority_alignment",
+      "resume_optimization_notes",
+      "cover_letter_draft",
+      "modified_resume_link",
     ];
+
+    if (values && values.length > 0) {
+      const current_header = values[0] || [];
+      if (current_header.length < full_header.length) {
+        await sheets.spreadsheets.values.update({
+          spreadsheetId: this.options.sheet_id,
+          range: `${this.options.sheet_name}!A1:N1`,
+          valueInputOption: "USER_ENTERED",
+          requestBody: { values: [full_header] },
+        });
+      }
+      return;
+    }
 
     await sheets.spreadsheets.values.update({
       spreadsheetId: this.options.sheet_id,
       range,
       valueInputOption: "USER_ENTERED",
       requestBody: {
-        values: [header_row],
+        values: [full_header],
       },
     });
   }
@@ -111,20 +124,41 @@ class GoogleSheetsJobApplicationTracker {
 
     const location = job_posting.location || "";
 
+    const job_url = job_posting.url || "";
+
+    const ats_score = pipeline_result.ats_score ?? "";
+
     const decision_text = should_apply
       ? "Apply"
       : "Skip";
+
+    const resume_notes =
+      pipeline_result.resume_optimization_notes ||
+      (pipeline_result.resume_optimization_suggestions || [])
+        .join("; ") ||
+      "";
+
+    const cover_letter =
+      pipeline_result.cover_letter_draft || "";
+
+    const modified_resume_link =
+      pipeline_result.modified_resume_link || "";
 
     return [
       current_date,
       company_name,
       job_title,
       location,
+      job_url,
       pipeline_result.job_match_score,
+      ats_score,
       decision_text,
       key_matching_skills.join(", "),
       missing_skills.join(", "),
       seniority_alignment,
+      resume_notes,
+      cover_letter,
+      modified_resume_link,
     ];
   }
 

@@ -1,0 +1,244 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Job Hunting Agent</title>
+  <style>
+    * { box-sizing: border-box; }
+    body {
+      font-family: system-ui, -apple-system, sans-serif;
+      max-width: 900px;
+      margin: 0 auto;
+      padding: 1.5rem;
+      background: #f8f9fa;
+      color: #1a1a1a;
+    }
+    h1 { font-size: 1.5rem; margin-bottom: 1rem; }
+    label {
+      display: block;
+      font-weight: 600;
+      margin-top: 1rem;
+      margin-bottom: 0.25rem;
+    }
+    input {
+      width: 100%;
+      padding: 0.5rem 0.75rem;
+      border: 1px solid #ccc;
+      border-radius: 6px;
+      font-size: 1rem;
+    }
+    .hint { font-size: 0.85rem; color: #666; margin-top: 0.25rem; }
+    section {
+      background: #fff;
+      padding: 1.25rem;
+      border-radius: 8px;
+      margin-bottom: 1.25rem;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+    }
+    section h2 { font-size: 1.1rem; margin: 0 0 0.75rem 0; }
+    button {
+      background: #0d6efd;
+      color: #fff;
+      border: none;
+      padding: 0.6rem 1.25rem;
+      border-radius: 6px;
+      font-size: 1rem;
+      cursor: pointer;
+      margin-top: 1rem;
+    }
+    button:hover { background: #0b5ed7; }
+    button:disabled { opacity: 0.6; cursor: not-allowed; }
+    #result { margin-top: 1.5rem; }
+    #result.empty { display: none; }
+    #result.error {
+      padding: 1rem;
+      border-radius: 8px;
+      background: #fff5f5;
+      border: 1px solid #f5c2c7;
+    }
+    .results-table {
+      width: 100%;
+      border-collapse: collapse;
+      background: #fff;
+      border-radius: 8px;
+      overflow: hidden;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+    }
+    .results-table th,
+    .results-table td {
+      padding: 0.6rem 0.75rem;
+      text-align: left;
+      border-bottom: 1px solid #dee2e6;
+    }
+    .results-table th {
+      background: #e9ecef;
+      font-weight: 600;
+      font-size: 0.85rem;
+    }
+    .results-table tr:last-child td { border-bottom: none; }
+    .results-table .score { font-weight: 600; }
+    .results-table .decision.apply { color: #0a0; }
+    .results-table .decision.skip { color: #c00; }
+    .results-table a { color: #0d6efd; }
+    .detail-row td {
+      padding: 0;
+      background: #f8f9fa;
+      vertical-align: top;
+    }
+    .detail-cell {
+      padding: 0.75rem 1rem;
+      font-size: 0.9rem;
+      white-space: pre-wrap;
+    }
+    .detail-cell h4 { margin: 0 0 0.5rem 0; font-size: 0.9rem; }
+    .summary-line { font-size: 0.9rem; margin-bottom: 0.5rem; }
+  </style>
+</head>
+<body>
+  <h1>Job Hunting Agent</h1>
+  <p>Upload your resume PDF and add up to 10 tags (skills, role, location, etc.). We search job portals by those tags, match your profile, compute ATS score, suggest resume tweaks, and list every job in your Google Sheet with apply links and cover letters.</p>
+
+  <form id="form">
+    <section>
+      <h2>Resume &amp; search tags</h2>
+      <label for="resume_pdf">Resume (PDF)</label>
+      <input type="file" id="resume_pdf" name="resume_pdf" accept=".pdf,application/pdf" required>
+      <label for="tags">Tags (up to 10, comma-separated)</label>
+      <input type="text" id="tags" name="tags" placeholder="e.g. Node.js, JavaScript, Remote, Backend, MySQL" required>
+      <p class="hint">Jobs are searched using these tags. Use skills, role names, or location (e.g. Remote).</p>
+    </section>
+
+    <section>
+      <h2>Google Sheet (optional)</h2>
+      <label for="sheet_url">Google Sheet link</label>
+      <input type="url" id="sheet_url" name="sheet_url" placeholder="https://docs.google.com/spreadsheets/d/...">
+      <p class="hint">Share the sheet with your service account. All jobs are listed with match score, ATS score, and cover letter.</p>
+    </section>
+
+    <button type="submit" id="submit">Search jobs &amp; apply</button>
+  </form>
+
+  <div id="result" class="empty"></div>
+
+  <script>
+    const form = document.getElementById("form");
+    const resultEl = document.getElementById("result");
+    const submitBtn = document.getElementById("submit");
+
+    function safeHrefOrPath(url) {
+      if (!url || typeof url !== "string") return "#";
+      const u = url.trim();
+      if (u.startsWith("/")) return u;
+      if (/^https?:\/\//i.test(u)) return u;
+      return "#";
+    }
+
+    function escapeHtml(str) {
+      if (str == null || str === "") return "";
+      const s = String(str);
+      return s
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&#39;");
+    }
+
+    function safeHref(url) {
+      if (!url || typeof url !== "string") return "#";
+      const u = url.trim();
+      if (/^https?:\/\//i.test(u)) return u;
+      return "#";
+    }
+
+    form.addEventListener("submit", async (e) => {
+      e.preventDefault();
+      resultEl.classList.remove("empty", "error");
+      resultEl.innerHTML = "<p>Searching jobs, parsing resume, and evaluating…</p>";
+      submitBtn.disabled = true;
+
+      const formData = new FormData();
+      formData.append("resume_pdf", document.getElementById("resume_pdf").files[0]);
+      formData.append("tags", document.getElementById("tags").value.trim());
+      formData.append("sheet_url", document.getElementById("sheet_url").value.trim());
+
+      try {
+        const res = await fetch("/api/search-and-apply", {
+          method: "POST",
+          body: formData,
+        });
+        const data = await res.json();
+
+        if (!res.ok) {
+          resultEl.classList.add("error");
+          resultEl.textContent = data.error || "Request failed";
+          return;
+        }
+
+        const results = data.results || [];
+        if (results.length === 0) {
+          resultEl.innerHTML = "<p>No jobs found for these tags. Try different or fewer tags, or add RAPIDAPI_KEY for live search.</p>";
+          return;
+        }
+
+        const tags_label = (data.tags && data.tags.length)
+          ? data.tags.join(", ")
+          : (data.search_query || "");
+        const tags_safe = escapeHtml(tags_label);
+        let html =
+          "<p class=\"summary-line\"><strong>" + escapeHtml(data.total_jobs) + "</strong> jobs found for tags: " +
+          (tags_safe ? "\"" + tags_safe + "\"" : "—") + ". Listed below and in your sheet.</p>";
+        html += "<table class=\"results-table\"><thead><tr>";
+        html += "<th>Job</th><th>Company</th><th>Location</th><th>Match</th><th>ATS</th><th>Decision</th>";
+        html += "<th>Tailored resume</th><th>Apply</th></tr></thead><tbody>";
+
+        results.forEach((r) => {
+          const apply_url = safeHref(r.job_url);
+          const apply_link = r.job_url
+            ? "<a href=\"" + escapeHtml(apply_url) + "\" target=\"_blank\" rel=\"noopener\">Apply</a>"
+            : "—";
+          const resume_url = safeHrefOrPath(r.modified_resume_link);
+          const resume_link = r.modified_resume_link
+            ? "<a href=\"" + escapeHtml(resume_url) + "\" target=\"_blank\" rel=\"noopener\">Download</a>"
+            : "—";
+          const decision_class = (r.decision || "").toLowerCase().replace(/[^a-z]/g, "");
+          html += "<tr>";
+          html += "<td>" + escapeHtml(r.job_title || "—") + "</td>";
+          html += "<td>" + escapeHtml(r.company_name || "—") + "</td>";
+          html += "<td>" + escapeHtml(r.location || "—") + "</td>";
+          html += "<td class=\"score\">" + escapeHtml(r.job_match_score ?? "—") + "</td>";
+          html += "<td class=\"score\">" + escapeHtml(r.ats_score ?? "—") + "</td>";
+          html += "<td class=\"decision " + escapeHtml(decision_class) + "\">" +
+            escapeHtml(r.decision || "—") + "</td>";
+          html += "<td>" + resume_link + "</td>";
+          html += "<td>" + apply_link + "</td>";
+          html += "</tr>";
+          const matching = (r.reasoning?.key_matching_skills || []).join(", ");
+          const missing = (r.reasoning?.missing_skills || []).join(", ");
+          const seniority = r.reasoning?.seniority_alignment || "—";
+          const tweaks = (r.resume_optimization_suggestions || []).join(" ");
+          const cover_raw = r.cover_letter_draft || "—";
+          const cover_safe = escapeHtml(cover_raw).replace(/\n/g, "<br>");
+          html += "<tr class=\"detail-row\"><td colspan=\"8\"><div class=\"detail-cell\">";
+          html += "<h4>Reasoning</h4>";
+          html += "Matching: " + escapeHtml(matching) + "<br>";
+          html += "Missing: " + escapeHtml(missing) + "<br>";
+          html += escapeHtml(seniority) + "<br><br>";
+          html += "<h4>Resume tweaks</h4>" + escapeHtml(tweaks) + "<br><br>";
+          html += "<h4>Cover letter</h4>" + cover_safe;
+          html += "</div></td></tr>";
+        });
+
+        html += "</tbody></table>";
+        resultEl.innerHTML = html;
+      } catch (err) {
+        resultEl.classList.add("error");
+        resultEl.textContent = "Error: " + (err.message || "Request failed");
+      } finally {
+        submitBtn.disabled = false;
+      }
+    });
+  </script>
+</body>
+</html>
