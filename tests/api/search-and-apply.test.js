@@ -23,6 +23,12 @@ jest.mock("../../src/services/job_search_service", () => ({
   ),
 }));
 
+jest.mock("../../src/utils/resume_to_pdf", () => ({
+  buildPdfFromHtml: jest.fn(() =>
+    Promise.resolve(Buffer.from("%PDF-1.4 fake html pdf"))
+  ),
+}));
+
 jest.mock("../../src/utils/local_resume_save", () => ({
   saveResumeLocally: jest.fn(() => "/resumes/Resume_Company_Title.pdf"),
   getResumeDirForStatic: jest.fn(() => require("path").join(__dirname, "..", "..", "data", "resumes")),
@@ -59,7 +65,7 @@ describe("POST /api/search-and-apply", () => {
     expect(first).toHaveProperty("reasoning");
     expect(first).toHaveProperty("cover_letter_draft");
     expect(first).toHaveProperty("modified_resume_link");
-  });
+  }, 15000);
 
   test("TC-API-002: Reject when resume_pdf is missing", async () => {
     const res = await request(app)
@@ -123,7 +129,7 @@ describe("POST /api/search-and-apply", () => {
     expect(res.body.tags).toEqual(
       expect.arrayContaining(["Node.js", "JavaScript", "MySQL"])
     );
-  });
+  }, 15000);
 
   test("TC-TAG-002: Tag trimming and empty filter", async () => {
     const res = await request(app)

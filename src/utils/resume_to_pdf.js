@@ -1,9 +1,11 @@
 const PDFDocument = require("pdfkit");
+let puppeteer = null;
 
 function buildPdfBuffer(text) {
   return new Promise((resolve, reject) => {
     const doc = new PDFDocument({ margin: 50, size: "A4" });
     const chunks = [];
+
     doc.on("data", (chunk) => chunks.push(chunk));
     doc.on("end", () => resolve(Buffer.concat(chunks)));
     doc.on("error", reject);
@@ -29,6 +31,40 @@ function buildPdfBuffer(text) {
   });
 }
 
+async function buildPdfFromHtml(html) {
+  if (!puppeteer) {
+    try {
+      puppeteer = require("puppeteer");
+    } catch (err) {
+      throw new Error(
+        "puppeteer is not installed. Install it to enable HTML to PDF " +
+          "conversion, or mock buildPdfFromHtml in tests."
+      );
+    }
+  }
+
+  const browser = await puppeteer.launch({
+    args: ["--no-sandbox", "--disable-setuid-sandbox"],
+    headless: "new",
+  });
+
+  try {
+    const page = await browser.newPage();
+    await page.setContent(html, { waitUntil: "networkidle0" });
+
+    const buffer = await page.pdf({
+      format: "A4",
+      printBackground: true,
+    });
+
+    return buffer;
+  } finally {
+    await browser.close();
+  }
+}
+
 module.exports = {
   buildPdfBuffer,
+  buildPdfFromHtml,
 };
+

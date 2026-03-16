@@ -117,6 +117,7 @@
     </section>
 
     <button type="submit" id="submit">Search jobs &amp; apply</button>
+    <input type="hidden" id="page" name="page" value="0">
   </form>
 
   <div id="result" class="empty"></div>
@@ -125,6 +126,7 @@
     const form = document.getElementById("form");
     const resultEl = document.getElementById("result");
     const submitBtn = document.getElementById("submit");
+    const pageInput = document.getElementById("page");
 
     function safeHrefOrPath(url) {
       if (!url || typeof url !== "string") return "#";
@@ -152,6 +154,15 @@
       return "#";
     }
 
+    function submitForPage(nextPage) {
+      const safe =
+        typeof nextPage === "number" && nextPage > 0 ? nextPage : 0;
+      if (pageInput) {
+        pageInput.value = String(safe);
+      }
+      form.dispatchEvent(new Event("submit", { cancelable: true }));
+    }
+
     form.addEventListener("submit", async (e) => {
       e.preventDefault();
       resultEl.classList.remove("empty", "error");
@@ -162,6 +173,7 @@
       formData.append("resume_pdf", document.getElementById("resume_pdf").files[0]);
       formData.append("tags", document.getElementById("tags").value.trim());
       formData.append("sheet_url", document.getElementById("sheet_url").value.trim());
+      formData.append("page", pageInput ? pageInput.value.trim() : "0");
 
       try {
         const res = await fetch("/api/search-and-apply", {
@@ -177,8 +189,12 @@
         }
 
         const results = data.results || [];
+        const currentPage =
+          typeof data.page === "number" && data.page >= 0
+            ? data.page
+            : 0;
         if (results.length === 0) {
-          resultEl.innerHTML = "<p>No jobs found for these tags. Try different or fewer tags, or add RAPIDAPI_KEY for live search.</p>";
+          resultEl.innerHTML = "<p>No jobs found for these tags on this page. Try a different page, different or fewer tags, or add RAPIDAPI_KEY for live search.</p>";
           return;
         }
 
@@ -186,7 +202,20 @@
           ? data.tags.join(", ")
           : (data.search_query || "");
         const tags_safe = escapeHtml(tags_label);
-        let html =
+        let html = "";
+        html += "<div class=\"summary-line\">";
+        html += "<button type=\"button\" id=\"page_prev\" class=\"btn\"";
+        if (currentPage <= 0) {
+          html += " disabled";
+        }
+        html += ">&laquo; Prev</button>";
+        const displayPage = currentPage + 1;
+        html += "<span style=\"margin: 0 0.75rem;\">Page " +
+          escapeHtml(displayPage) +
+          "</span>";
+        html += "<button type=\"button\" id=\"page_next\" class=\"btn\">Next &raquo;</button>";
+        html += "</div>";
+        html +=
           "<p class=\"summary-line\"><strong>" + escapeHtml(data.total_jobs) + "</strong> jobs found for tags: " +
           (tags_safe ? "\"" + tags_safe + "\"" : "—") + ". Listed below and in your sheet.</p>";
         html += "<table class=\"results-table\"><thead><tr>";
@@ -232,6 +261,21 @@
 
         html += "</tbody></table>";
         resultEl.innerHTML = html;
+
+        const prevBtn = document.getElementById("page_prev");
+        const nextBtn = document.getElementById("page_next");
+        if (prevBtn) {
+          prevBtn.addEventListener("click", (ev) => {
+            ev.preventDefault();
+            submitForPage(currentPage - 1);
+          });
+        }
+        if (nextBtn) {
+          nextBtn.addEventListener("click", (ev) => {
+            ev.preventDefault();
+            submitForPage(currentPage + 1);
+          });
+        }
       } catch (err) {
         resultEl.classList.add("error");
         resultEl.textContent = "Error: " + (err.message || "Request failed");

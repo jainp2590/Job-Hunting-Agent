@@ -43,3 +43,12 @@ data/resumes/
 .cursor/
 *.swp
 *.swo
+
+# Service account keys (never commit)
+keys/
+*-credentials.json
+*-sa.json
+*.pem
+
+sample_resume.*
+

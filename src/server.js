@@ -18,8 +18,9 @@ const {
 } = require("./utils/local_resume_save");
 const { calculateAtsScore } = require("./utils/ats_score");
 const { buildOptimizedSummary } = require("./utils/resume_optimizer");
-const { buildModifiedResumeText } = require("./utils/resume_modifier");
-const { buildPdfBuffer } = require("./utils/resume_to_pdf");
+const { buildTargetedSummary } = require("./utils/resume_modifier");
+const { buildModifiedResumeHtml } = require("./utils/resume_html_template");
+const { buildPdfFromHtml } = require("./utils/resume_to_pdf");
 const logger = require("./utils/logger");
 
 const app = express();
@@ -58,6 +59,10 @@ const KNOWN_SKILLS = [
   "java",
   "go",
   "ci/cd",
+  "backend",
+  "full stack",
+  "ai",
+  "machine learning",
 ];
 
 function extractSkillsFromText(text) {
@@ -260,9 +265,20 @@ app.post(
       }
 
       const user_profile = buildProfileFromResumeText(resume_text);
-      const pipeline = new CareerAgentPipeline({ match_threshold: 75 });
+      const pipeline = new CareerAgentPipeline({ match_threshold: 70 });
 
-      const jobs = await searchJobs(tags);
+      const page_raw = form.page;
+      let page = 0;
+      if (typeof page_raw === "string" && page_raw.trim() !== "") {
+        const parsed_page = parseInt(page_raw.trim(), 10);
+        if (!Number.isNaN(parsed_page) && parsed_page >= 0) {
+          page = parsed_page;
+        }
+      }
+
+      const jobs = await searchJobs(tags, {
+        page,
+      });
       logger.info("search-and-apply: jobs found", jobs.length);
 
       const sheet_url = (form.sheet_url || "").trim() || process.env.JOB_AGENT_SHEET_URL;
@@ -316,16 +332,19 @@ app.post(
 
         let modified_resume_link = "";
         try {
-          const modified_text = buildModifiedResumeText(
+          const targeted_summary = buildTargetedSummary(
             resume_text,
             job_posting,
             result.reasoning
           );
-          const pdf_buffer = await buildPdfBuffer(modified_text);
+
+          const html = buildModifiedResumeHtml(targeted_summary);
+          const pdf_buffer = await buildPdfFromHtml(html);
           const company_part = job_posting.company_name || "Company";
           const title_part = job_posting.title || "Role";
           const file_name = `Resume_${company_part}_${title_part}`;
           modified_resume_link = saveResumeLocally(pdf_buffer, file_name);
+
           logger.debug(
             "Resume saved locally:",
             job_posting.company_name,
@@ -385,6 +404,7 @@ app.post(
         tags,
         search_query: buildSearchQueryFromTags(tags),
         total_jobs: results.length,
+        page,
         results,
       });
     } catch (error) {

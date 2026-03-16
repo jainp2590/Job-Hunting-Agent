@@ -77,7 +77,7 @@ The app loads `.env` automatically (via `dotenv`). Do not commit `.env`; it is l
 
 ## Web UI (resume PDF + tags + Google Sheet link)
 
-The frontend takes your **resume PDF** and **up to 10 tags** (comma-separated). The app searches for jobs matching those tags, evaluates each one (match score + ATS score), suggests resume tweaks, generates a cover letter, and lists every job in your Google Sheet with apply links.
+The frontend takes your **resume PDF** and **up to 10 tags** (comma-separated). The app searches for jobs matching those tags, evaluates each one (match score + ATS score), suggests resume tweaks, generates a cover letter, and lists every job in your Google Sheet with apply links. For each job, it also generates a **tailored resume PDF** using an HTML template that matches your base resume layout.
 
 1. Set `GOOGLE_APPLICATION_CREDENTIALS` if you want to record to Google Sheets (see [Google Sheets setup](#google-sheets-setup)).
 2. Optional: set `RAPIDAPI_KEY` for live job search (see [Job search](#job-search-api)). Without it, the app uses mock job data so you can test the flow.
@@ -92,13 +92,38 @@ The frontend takes your **resume PDF** and **up to 10 tags** (comma-separated). 
    - **Resume**: Upload a **resume PDF** (required; max 5 MB). Profile is inferred from the PDF.
    - **Tags**: Up to 10 comma-separated tags (e.g. “Node.js, JavaScript, Remote, Backend”). The app searches job portals by these tags and evaluates each result.
    - **Google Sheet link** (optional): Your sheet URL; share the sheet with the service account. Each job is appended with match score, ATS score, decision, resume notes, and cover letter.
-6. Click **Search jobs & apply**. The page shows a table of jobs with match score, ATS score, decision, apply link, and expandable reasoning and cover letter. All rows are also written to your sheet.
+6. Click **Search jobs & apply**. The page shows a table of jobs with match score, ATS score, decision, apply link, and expandable reasoning and cover letter. All rows are also written to your sheet. Results are **paginated**: each request returns 10 jobs, and you can move between pages using the **Prev/Next** pagination controls at the top of the table.
+
+### Modified resume HTML template
+
+The app uses an HTML template file (`sample_resume.html` in the project root) as the base layout for tailored resumes:
+
+- `sample_resume.html` should represent your **baseline resume layout** (fonts, sections, header, etc.).
+- For each job, the backend:
+  - Builds a **targeted summary** (based on your parsed resume text and the specific job).
+  - Injects that summary into the **PROFESSIONAL SUMMARY** section of `sample_resume.html`.
+  - Converts the resulting HTML to PDF and saves it under `data/resumes/` (or `RESUME_OUTPUT_DIR`), serving it at `/resumes/...`.
+- The rest of the resume sections (Experience, Skills, Projects, Education, etc.) come from the HTML template, so the visual structure stays consistent.
+
+If you want to change the visual style of your tailored resumes, edit `sample_resume.html` and restart the server.
 
 ---
 
 ## Job search API
 
 Job search uses [JSearch](https://rapidapi.com/letscrape-6bRBa3QguO5/api/jsearch) on RapidAPI. Without an API key, the app returns **mock jobs** (3 sample listings) so you can run the full flow.
+
+The backend calls JSearch with:
+
+- A query built from your tags (joined into a single search string).
+- A **page number** (0-based in the UI, converted to 1-based for the API).
+- A fixed page size of **10 jobs per page** (JSearch default for a single page).
+
+Each `/api/search-and-apply` request:
+
+- Fetches **one JSearch page** (10 jobs).
+- Evaluates those jobs with the `CareerAgentPipeline`.
+- Generates tailored resume PDFs for each job and writes them to the sheet (if configured).
 
 To use live job search:
 
@@ -186,7 +211,7 @@ const {
   GoogleSheetsJobApplicationTracker,
 } = require("./src/tracking/google_sheets_job_application_tracker");
 
-const pipeline = new CareerAgentPipeline({ match_threshold: 75 });
+const pipeline = new CareerAgentPipeline({ match_threshold: 70 });
 
 const sheet_url = process.env.JOB_AGENT_SHEET_URL;
 const sheet_id =

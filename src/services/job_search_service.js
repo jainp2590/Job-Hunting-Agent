@@ -8,10 +8,12 @@ function buildSearchQueryFromTags(tags) {
   return trimmed.join(" ").slice(0, 200) || "software engineer";
 }
 
-async function searchWithJSearch(tags, api_key, page = 1) {
+async function searchWithJSearch(tags, api_key, page) {
   const query = encodeURIComponent(buildSearchQueryFromTags(tags));
+  const page_number = page || 1;
   const url =
-    `https://${JSEARCH_HOST}/search?query=${query}&page=${page}&num_pages=1`;
+    `https://${JSEARCH_HOST}/search?query=${query}` +
+    `&page=${page_number}&num_pages=1`;
 
   const res = await fetch(url, {
     method: "GET",
@@ -27,17 +29,32 @@ async function searchWithJSearch(tags, api_key, page = 1) {
   }
 
   const data = await res.json();
-  const jobs = (data.data || []).map((job) => ({
-    title: job.job_title || "",
-    company_name: job.employer_name || "",
-    location: [
-      job.job_city,
-      job.job_state,
-      job.job_country,
-    ].filter(Boolean).join(", "),
-    description: job.job_description || "",
-    url: job.job_apply_link || job.job_google_link || "",
-  }));
+  const now_ms = Date.now();
+  const jobs = (data.data || []).map((job) => {
+    let posted_at_ms = null;
+    if (job.job_posted_at_timestamp) {
+      posted_at_ms = Number(job.job_posted_at_timestamp) * 1000;
+    } else if (job.job_posted_at_datetime_utc) {
+      const parsed = Date.parse(job.job_posted_at_datetime_utc);
+      if (!Number.isNaN(parsed)) {
+        posted_at_ms = parsed;
+      }
+    }
+
+    return {
+      title: job.job_title || "",
+      company_name: job.employer_name || "",
+      location: [
+        job.job_city,
+        job.job_state,
+        job.job_country,
+      ].filter(Boolean).join(", "),
+      description: job.job_description || "",
+      url: job.job_apply_link || job.job_google_link || "",
+      posted_at_ms,
+      fetched_at_ms: now_ms,
+    };
+  });
 
   return jobs;
 }
@@ -80,13 +97,16 @@ function getMockJobs(tags) {
 async function searchJobs(tags, options = {}) {
   const api_key = options.api_key || process.env.RAPIDAPI_KEY;
   const use_mock = options.use_mock === true || !api_key;
+  const page_opt = Number.isInteger(options.page) &&
+    options.page >= 0 ? options.page : 0;
+  const api_page = page_opt + 1;
   const tag_list = normalizeTags(tags);
 
   if (use_mock) {
     return getMockJobs(tag_list);
   }
 
-  const jobs = await searchWithJSearch(tag_list, api_key);
+  const jobs = await searchWithJSearch(tag_list, api_key, api_page);
   return jobs;
 }
 

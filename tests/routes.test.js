@@ -4,6 +4,15 @@ jest.mock("../src/services/job_search_service", () => ({
   ...jest.requireActual("../src/services/job_search_service"),
   searchJobs: jest.fn(() => Promise.resolve([])),
 }));
+jest.mock("../src/utils/resume_to_pdf", () => ({
+  buildPdfFromHtml: jest.fn(() =>
+    Promise.resolve(Buffer.from("%PDF-1.4 fake html pdf"))
+  ),
+}));
+jest.mock("../src/utils/local_resume_save", () => ({
+  saveResumeLocally: jest.fn(() => "/resumes/Resume_Company_Title.pdf"),
+  getResumeDirForStatic: jest.fn(() => require("path").join(__dirname, "..", "data", "resumes")),
+}));
 jest.mock("pdf-parse", () =>
   jest.fn(() => Promise.resolve({ text: "Sample resume text." }))
 );

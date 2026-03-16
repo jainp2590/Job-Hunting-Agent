@@ -80,8 +80,9 @@ class CareerAgentPipeline {
     const company_name = (job_posting.company_name || "").trim();
     const location = (job_posting.location || "").trim();
 
-    const description_text = (job_posting.description || "")
-      .toLowerCase();
+    const description_text = this.normalizeDescriptionText(
+      job_posting.description || ""
+    );
 
     const required_skills = this.extractJobSkills(description_text);
     const nice_to_have_skills = this.extractNiceToHaveSkills(
@@ -129,6 +130,10 @@ class CareerAgentPipeline {
 
     const required_skills = job.required_skills;
     const nice_to_have_skills = job.nice_to_have_skills;
+
+    if (required_skills.length === 0 && nice_to_have_skills.length === 0) {
+      return 70;
+    }
 
     const total_required = required_skills.length || 1;
     const total_nice = nice_to_have_skills.length || 1;
@@ -263,6 +268,14 @@ class CareerAgentPipeline {
     return "mid";
   }
 
+  normalizeDescriptionText(raw_description) {
+    const lower = (raw_description || "").toLowerCase();
+
+    return lower
+      .replace(/node[\s-]?js/g, "node.js")
+      .replace(/full[\s-]?stack/g, "full stack");
+  }
+
   extractJobSkills(description_text) {
     const known_skills = [
       "javascript",
@@ -281,6 +294,10 @@ class CareerAgentPipeline {
       "graphql",
       "rest",
       "ci/cd",
+      "backend",
+      "full stack",
+      "ai",
+      "machine learning",
     ];
 
     return known_skills.filter((skill) => {
